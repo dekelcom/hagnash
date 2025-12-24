@@ -12,15 +12,14 @@
         .controls { background: white; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 1000; flex-shrink: 0; }
         .filters { display: flex; gap: 5px; margin-bottom: 8px; }
         select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; box-sizing: border-box; }
-        #map { flex-grow: 1; width: 100%; }
+        #map { flex-grow: 1; width: 100%; z-index: 1; }
         .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; margin-top: 10px; }
         
-        /* כפתור מיקום עצמי - עיצוב מינימלי שלא מפריע */
         .locate-btn { 
-            position: absolute; bottom: 25px; left: 15px; z-index: 1000; 
-            background: white; border: 2px solid rgba(0,0,0,0.2); width: 45px; height: 45px; 
-            border-radius: 5px; cursor: pointer; font-size: 22px; display: flex; 
-            align-items: center; justify-content: center; box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+            position: absolute; bottom: 25px; left: 15px; z-index: 2000; 
+            background: white; border: 2px solid rgba(0,0,0,0.3); width: 50px; height: 50px; 
+            border-radius: 8px; cursor: pointer; font-size: 24px; display: flex; 
+            align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
         }
     </style>
 </head>
@@ -39,30 +38,40 @@
 </div>
 
 <div id="map"></div>
-
-<button class="locate-btn" onclick="locateUser()">📍</button>
+<button class="locate-btn" onclick="safeLocate()">📍</button>
 
 <script>
     const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
     let data = [];
     let map, markersGroup, userMarker;
 
+    // איתחול בסיסי - תמיד יעבוד
     function initMap() {
-        const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
-        map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [sat] });
-        markersGroup = L.layerGroup().addTo(map);
+        try {
+            const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
+            map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [sat] });
+            markersGroup = L.layerGroup().addTo(map);
+            
+            // הגדרת אירועי מיקום בצורה בטוחה
+            map.on('locationfound', onLocationFound);
+            map.on('locationerror', onLocationError);
+        } catch(e) { console.error("Map Init Error", e); }
     }
 
-    // פונקציית מיקום פשוטה
-    function locateUser() {
+    function safeLocate() {
+        console.log("מנסה למצוא מיקום...");
         map.locate({setView: true, maxZoom: 16});
     }
 
-    map.on('locationfound', function(e) {
+    function onLocationFound(e) {
         if (userMarker) map.removeLayer(userMarker);
         userMarker = L.circleMarker(e.latlng, {radius: 8, color: 'white', fillColor: '#2196F3', fillOpacity: 1, weight: 2}).addTo(map);
         userMarker.bindPopup("אתה כאן").openPopup();
-    });
+    }
+
+    function onLocationError(e) {
+        alert("לא ניתן לגשת למיקום. וודא שאתה גולש ב-HTTPS וה-GPS פעיל.");
+    }
 
     async function load() {
         try {
@@ -75,17 +84,13 @@
                 if (c.length < 6) return null;
                 const clean = (v) => v ? v.replace(/"/g, '').trim() : "";
                 return {
-                    type: clean(c[0]),    
-                    name: clean(c[1]),    
-                    lat: parseFloat(c[2]), 
-                    lon: parseFloat(c[3]), 
-                    pluga: clean(c[5])   
+                    type: clean(c[0]), name: clean(c[1]), lat: parseFloat(c[2]), lon: parseFloat(c[3]), pluga: clean(c[5])   
                 };
             }).filter(i => i && i.name && !isNaN(i.lat));
 
             fillFilters();
             filter();
-        } catch (e) { console.error("Error loading data"); }
+        } catch (e) { console.error("Data Load Error"); }
     }
 
     function fillFilters() {
