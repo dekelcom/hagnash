@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>אלפון ניווט גזרתי</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -11,18 +11,8 @@
         .header { background: #2c3e50; color: white; padding: 10px; text-align: center; flex-shrink: 0; }
         .controls { background: white; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 1000; flex-shrink: 0; }
         .filters { display: flex; gap: 5px; margin-bottom: 8px; }
-        select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; }
+        select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; box-sizing: border-box; }
         #map { flex-grow: 1; width: 100%; }
-        
-        /* כפתור מיקום עצמי צף */
-        .locate-btn { 
-            position: absolute; bottom: 30px; left: 20px; z-index: 1000; 
-            background: white; border: none; width: 55px; height: 55px; 
-            border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
-            cursor: pointer; font-size: 28px; display: flex; align-items: center; justify-content: center;
-        }
-        .locate-btn:active { background: #f0f0f0; transform: scale(0.95); }
-
         .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; margin-top: 10px; }
     </style>
 </head>
@@ -42,39 +32,16 @@
 
 <div id="map"></div>
 
-<button class="locate-btn" onclick="locateUser()" title="איפה אני?">📍</button>
-
 <script>
     const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
     let data = [];
-    let map, markersGroup, userMarker;
+    let map, markersGroup;
 
     function initMap() {
         const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
         map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [sat] });
         markersGroup = L.layerGroup().addTo(map);
     }
-
-    // פונקציית המיקום החדשה
-    function locateUser() {
-        map.locate({setView: true, maxZoom: 16, enableHighAccuracy: true});
-    }
-
-    // מה קורה כשנמצא מיקום
-    map.on('locationfound', (e) => {
-        if (userMarker) map.removeLayer(userMarker);
-        userMarker = L.circleMarker(e.latlng, {
-            radius: 9,
-            color: 'white',
-            fillColor: '#2196F3',
-            fillOpacity: 1,
-            weight: 3
-        }).addTo(map).bindPopup("אתה כאן").openPopup();
-    });
-
-    map.on('locationerror', () => {
-        alert("לא ניתן לגשת למיקום. וודא שה-GPS מופעל ואישרת הרשאת מיקום בדפדפן.");
-    });
 
     async function load() {
         try {
@@ -126,9 +93,7 @@
             m.bindPopup(`<b>${i.name}</b><br>${i.type} | פלוגה: ${i.pluga}<br><a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">Waze</a>`);
             markersGroup.addLayer(m);
         });
-        if (list.length > 0 && !userMarker) { 
-            map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50]});
-        }
+        if (list.length > 0) map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50]});
     }
 
     initMap();
