@@ -3,39 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>אלפון ניווט גזרתי - V1.2.2</title>
+    <title>אלפון ניווט גזרתי - V1.2.3</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root { --primary: #2c3e50; --accent: #27ae60; --waze: #33ccff; }
         body { font-family: system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #f4f4f4; overflow: hidden; }
-        
-        /* כותרת עם מספר גרסה */
         .header { background: var(--primary); color: white; padding: 10px; text-align: center; z-index: 1001; }
         .version-top { font-size: 0.7rem; opacity: 0.8; display: block; margin-top: 2px; }
-
         .controls { background: white; padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; }
         .full-width { grid-column: span 2; }
-        
         #map { flex-grow: 1; width: 100%; position: relative; }
-        
-        .locate-btn { 
-            position: absolute; bottom: 25px; right: 10px; z-index: 1000; 
-            background: white; border: none; width: 50px; height: 50px; 
-            border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.3); 
-            cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 24px;
-        }
-
+        .locate-btn { position: absolute; bottom: 25px; right: 10px; z-index: 1000; background: white; border: none; width: 50px; height: 50px; border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 24px; }
         .waze-link { display: block; margin-top: 10px; background: var(--waze); color: white; text-align: center; padding: 12px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; }
         .popup-container { direction: rtl; text-align: right; min-width: 160px; }
+        #status-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2000; background: white; padding: 20px; border-radius: 10px; display: none; text-align: center; border: 2px solid var(--primary); }
     </style>
 </head>
 <body>
 
+<div id="status-msg">טוען נתונים...</div>
+
 <div class="header">
     <h2 style="margin:0; font-size: 1.1rem;">אלפון ניווט גזרתי</h2>
-    <span class="version-top">גרסה 1.2.2</span>
+    <span class="version-top">גרסה 1.2.3</span>
 </div>
 
 <div class="controls">
@@ -49,65 +41,79 @@
 </div>
 
 <div id="map"></div>
-
-<button class="locate-btn" onclick="locateUser()" title="המיקום שלי">📍</button>
+<button class="locate-btn" onclick="locateUser()">📍</button>
 
 <script>
-    const APP_VERSION = "1.2.2";
+    const APP_VERSION = "1.2.3";
     const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
     
     let allLocations = [];
     let map, markersGroup, userMarker;
 
-    // פונקציה לפיענוח CSV חכם (מטפל בפסיקים בתוך מרכאות)
+    function showStatus(msg) {
+        const el = document.getElementById('status-msg');
+        el.style.display = 'block';
+        el.innerText = msg;
+    }
+
+    function hideStatus() {
+        document.getElementById('status-msg').style.display = 'none';
+    }
+
+    // פונקציית CSV משופרת
     function parseCSV(text) {
-        const lines = text.split('\n').filter(line => line.trim() !== '');
-        return lines.map(line => {
-            const result = [];
+        const result = [];
+        const rows = text.split(/\r?\n/);
+        for (let row of rows) {
+            if (!row.trim()) continue;
+            const cols = [];
             let current = '';
             let inQuotes = false;
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                if (char === '"' && line[i+1] === '"') { current += '"'; i++; }
+            for (let i = 0; i < row.length; i++) {
+                const char = row[i];
+                if (char === '"' && row[i+1] === '"') { current += '"'; i++; }
                 else if (char === '"') { inQuotes = !inQuotes; }
-                else if (char === ',' && !inQuotes) { result.push(current); current = ''; }
+                else if (char === ',' && !inQuotes) { cols.push(current.trim()); current = ''; }
                 else { current += char; }
             }
-            result.push(current);
-            return result;
-        });
+            cols.push(current.trim());
+            result.push(cols);
+        }
+        return result;
     }
 
     function initMap() {
-        map = L.map('map').setView([32.08, 35.28], 12);
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-        const satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}');
-        
-        osm.addTo(map);
-        L.control.layers({ "מפה": osm, "לוויין": satellite }).addTo(map);
+        map = L.map('map').setView([32.11, 35.26], 12);
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}');
+        L.control.layers({ "מפה": osm, "לוויין": sat }).addTo(map);
         markersGroup = L.layerGroup().addTo(map);
     }
 
     async function loadData() {
+        showStatus("מתחבר לגיליון...");
         try {
-            const response = await fetch(csvUrl);
+            const response = await fetch(csvUrl + '&cache-bust=' + Date.now());
             const text = await response.text();
-            const data = parseCSV(text).slice(1); // דילוג על כותרת
+            const data = parseCSV(text).slice(1);
             
             allLocations = data.map(cols => ({
-                type: cols[0]?.trim(),
-                name: cols[1]?.trim(),
+                type: cols[0],
+                name: cols[1],
                 lat: parseFloat(cols[2]),
                 lon: parseFloat(cols[3]),
-                pluga: cols[5]?.trim() // עמודה F
+                pluga: cols[5]
             })).filter(loc => loc.name && !isNaN(loc.lat));
 
-            console.log("Loaded targets:", allLocations.length);
-            populateSelectors();
-            updateFilters();
-        } catch (e) { 
-            console.error("Error:", e); 
-            alert("שגיאה בטעינת הנתונים. וודא שהגיליון מפורסם כ-CSV.");
+            if (allLocations.length === 0) {
+                showStatus("לא נמצאו נתונים תקינים בגיליון.");
+            } else {
+                hideStatus();
+                populateSelectors();
+                updateFilters();
+            }
+        } catch (e) {
+            showStatus("שגיאה בטעינה: " + e.message);
         }
     }
 
@@ -141,24 +147,20 @@
         const bounds = [];
         data.forEach(loc => {
             const marker = L.marker([loc.lat, loc.lon]);
-            const popupHTML = `
+            marker.bindPopup(`
                 <div class="popup-container">
                     <b>${loc.name}</b><br>
                     סוג: ${loc.type}<br>
-                    גזרה: פלוגת ${loc.pluga}<br>
-                    <a href="https://waze.com/ul?ll=${loc.lat},${loc.lon}&navigate=yes" target="_blank" class="waze-link">ניווט עם Waze</a>
-                </div>`;
-            marker.bindPopup(popupHTML);
+                    גזרה: ${loc.pluga}<br>
+                    <a href="https://waze.com/ul?ll=${loc.lat},${loc.lon}&navigate=yes" target="_blank" class="waze-link">ניווט Waze</a>
+                </div>`);
             markersGroup.addLayer(marker);
             bounds.push([loc.lat, loc.lon]);
         });
         if (bounds.length > 0) map.fitBounds(bounds, { padding: [40, 40] });
     }
 
-    function locateUser() {
-        map.locate({setView: true, maxZoom: 16});
-    }
-
+    function locateUser() { map.locate({setView: true, maxZoom: 16}); }
     map.on('locationfound', (e) => {
         if (userMarker) map.removeLayer(userMarker);
         userMarker = L.circleMarker(e.latlng, { radius: 8, fillColor: "#3498db", color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.8 }).addTo(map);
