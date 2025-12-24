@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>אלפון ניווט דינמי</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --waze: #33ccff; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; margin: 0; padding: 15px; }
+        .header { background: var(--primary); color: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
+        .search-container { position: sticky; top: 10px; z-index: 100; margin-bottom: 20px; }
+        input { width: 100%; padding: 15px; border-radius: 10px; border: 2px solid #ddd; font-size: 18px; box-sizing: border-box; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .card { background: white; margin-bottom: 12px; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border-right: 5px solid var(--accent); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .card-info h3 { margin: 0 0 5px 0; font-size: 18px; color: #333; }
+        .card-info p { margin: 0; font-size: 14px; color: #777; }
+        .nav-btn { background: var(--waze); color: white; text-decoration: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; font-size: 14px; }
+        .tag { font-size: 11px; background: #eee; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
+        #loader { text-align: center; padding: 20px; color: var(--primary); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2>אלפון ניווט דינמי</h2>
+</div>
+
+<div class="search-container">
+    <input type="text" id="searchInput" placeholder="חפש יישוב, צומת, מוצב..." oninput="search()">
+</div>
+
+<div id="loader">טוען נתונים מהגיליון...</div>
+<div id="list"></div>
+
+<script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
+    let allLocations = [];
+
+    // פונקציה לטעינת הנתונים מה-Google Sheets
+    async function loadData() {
+        try {
+            const response = await fetch(csvUrl);
+            const data = await response.text();
+            const rows = data.split('\n').slice(1); // דילוג על שורת הכותרת
+            
+            allLocations = rows.map(row => {
+                const columns = row.split(',');
+                return {
+                    type: columns[0],
+                    name: columns[1],
+                    lat: columns[2],
+                    lon: columns[3],
+                    pluga: columns[5] // עמודה F בגיליון שלך
+                };
+            }).filter(loc => loc.name); // סינון שורות ריקות
+
+            document.getElementById('loader').style.display = 'none';
+            render(allLocations);
+        } catch (error) {
+            document.getElementById('loader').innerText = 'שגיאה בטעינת הנתונים.';
+            console.error(error);
+        }
+    }
+
+    function search() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = allLocations.filter(loc => 
+            loc.name.toLowerCase().includes(query) || 
+            (loc.type && loc.type.toLowerCase().includes(query)) ||
+            (loc.pluga && loc.pluga.toLowerCase().includes(query))
+        );
+        render(filtered);
+    }
+
+    function render(data) {
+        const container = document.getElementById('list');
+        container.innerHTML = data.map(loc => `
+            <div class="card">
+                <div class="card-info">
+                    <h3>${loc.name}</h3>
+                    <p>
+                        <span class="tag">${loc.type || ''}</span>
+                        <span>פלוגה: ${loc.pluga || ''}</span>
+                    </p>
+                </div>
+                <a href="https://waze.com/ul?ll=${loc.lat},${loc.lon}&navigate=yes" class="nav-btn">Waze</a>
+            </div>
+        `).join('');
+    }
+
+    // הפעלה בטעינה
+    loadData();
+</script>
+
+</body>
+</html>
