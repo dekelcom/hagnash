@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>אלפון ניווט V3.1.0 - עדכון שטח</title>
+    <title>אלפון ניווט V3.1.3</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         body { font-family: system-ui, sans-serif; margin: 0; padding: 0; direction: rtl; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        .header { background: #2c3e50; color: white; padding: 10px; text-align: center; flex-shrink: 0; }
+        .header { background: #2c3e50; color: white; padding: 10px; text-align: center; flex-shrink: 0; position: relative; }
+        .version-tag { font-size: 10px; position: absolute; left: 10px; bottom: 5px; opacity: 0.7; }
         .controls { background: white; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 1000; flex-shrink: 0; }
         .filters { display: flex; gap: 5px; margin-bottom: 8px; }
         select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; box-sizing: border-box; }
         #map { flex-grow: 1; width: 100%; z-index: 1; }
-        .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; margin-top: 10px; margin-left: 5px;}
-        .update-btn { display: inline-block; background: #e67e22; color: white; text-decoration: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; border:none; cursor:pointer;}
+        .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 10px; border-radius: 6px; font-weight: bold; margin-top: 10px; }
+        .update-btn { display: inline-block; background: #e67e22; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; margin-top: 10px; cursor: pointer; width: 100%; }
         .locate-btn { position: absolute; bottom: 25px; left: 15px; z-index: 2000; background: white; border: 2px solid rgba(0,0,0,0.3); width: 50px; height: 50px; border-radius: 8px; font-size: 24px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
     </style>
 </head>
@@ -22,7 +23,7 @@
 
 <div class="header">
     <h3 style="margin:0;">אלפון ניווט גזרתי</h3>
-    <span style="font-size:10px;">גרסה 3.1.0 - עדכון שטח</span>
+    <span class="version-tag">גרסה 3.1.3</span>
 </div>
 
 <div class="controls">
@@ -39,7 +40,7 @@
 
 <script>
     const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
-    const scriptUrl = 'כאן_להדביק_את_הקישור_של_ה-DEPLOYMENT'; 
+    const scriptUrl = 'https://script.google.com/macros/s/AKfycbxUV52m9V2a99XYCsLkg4p2WgAKmvcfcRdX0hHYnaVmFQUXOXp8MDOxOhi8WPCU0d1S/exec'; 
 
     let data = [];
     let map, markersGroup, userMarker, userCoords = null;
@@ -57,15 +58,16 @@
 
     function safeLocate() { map.locate({setView: true, maxZoom: 16}); }
 
-    async function updateLocation(name) {
-        if (!userCoords) { alert("חובה להפעיל GPS (📍) קודם!"); return; }
-        if (!confirm("האם לעדכן את המיקום של " + name + " למיקום הנוכחי שלך?")) return;
+    function updateLocation(name) {
+        if (!userCoords) { alert("חובה ללחוץ על 📍 כדי למצוא את המיקום שלך קודם!"); return; }
+        if (!confirm("לעדכן את המיקום של " + name + " למיקומך הנוכחי?")) return;
 
-        try {
-            const finalUrl = `${scriptUrl}?name=${encodeURIComponent(name)}&lat=${userCoords.lat}&lon=${userCoords.lng}`;
-            const res = await fetch(finalUrl, {mode: 'no-cors'}); 
-            alert("בקשת עדכון נשלחה! (השינוי יופיע בגיליון תוך דקה)");
-        } catch (e) { alert("שגיאה בשליחת עדכון"); }
+        const finalUrl = `${scriptUrl}?name=${encodeURIComponent(name)}&lat=${userCoords.lat}&lon=${userCoords.lng}`;
+        
+        // שליחה באמצעות fetch עם התעלמות מהתגובה (נועד לעקוף בעיות CORS)
+        fetch(finalUrl, { mode: 'no-cors' })
+            .then(() => alert("בקשת עדכון נשלחה לגיליון! השינוי יופיע באתר תוך כדקה."))
+            .catch(() => alert("שגיאה בשליחת העדכון."));
     }
 
     async function load() {
@@ -112,9 +114,11 @@
         list.forEach(i => {
             const m = L.marker([i.lat, i.lon]);
             const content = `
-                <b>${i.name}</b><br>${i.type}<br>
-                <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">Waze</a>
-                <button class="update-btn" onclick="updateLocation('${i.name}')">📍 עדכן מיקום</button>
+                <div style="text-align:center; min-width:150px;">
+                    <b style="font-size:16px;">${i.name}</b><br>${i.type}<br>
+                    <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">ניווט Waze</a>
+                    <button class="update-btn" onclick="updateLocation('${i.name}')">📍 עדכן מיקום לשטח</button>
+                </div>
             `;
             m.bindPopup(content);
             markersGroup.addLayer(m);
