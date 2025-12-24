@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>אלפון ניווט גזרתי</title>
+    <title>אלפון ניווט V3.1.0 - עדכון שטח</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -13,20 +13,16 @@
         .filters { display: flex; gap: 5px; margin-bottom: 8px; }
         select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; box-sizing: border-box; }
         #map { flex-grow: 1; width: 100%; z-index: 1; }
-        .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; margin-top: 10px; }
-        
-        .locate-btn { 
-            position: absolute; bottom: 25px; left: 15px; z-index: 2000; 
-            background: white; border: 2px solid rgba(0,0,0,0.3); width: 50px; height: 50px; 
-            border-radius: 8px; cursor: pointer; font-size: 24px; display: flex; 
-            align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-        }
+        .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; margin-top: 10px; margin-left: 5px;}
+        .update-btn { display: inline-block; background: #e67e22; color: white; text-decoration: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; border:none; cursor:pointer;}
+        .locate-btn { position: absolute; bottom: 25px; left: 15px; z-index: 2000; background: white; border: 2px solid rgba(0,0,0,0.3); width: 50px; height: 50px; border-radius: 8px; font-size: 24px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
 
 <div class="header">
     <h3 style="margin:0;">אלפון ניווט גזרתי</h3>
+    <span style="font-size:10px;">גרסה 3.1.0 - עדכון שטח</span>
 </div>
 
 <div class="controls">
@@ -34,7 +30,7 @@
         <select id="pFilter" onchange="filter()"><option value="">כל הפלוגות</option></select>
         <select id="tFilter" onchange="filter()"><option value="">כל הסוגים</option></select>
     </div>
-    <input type="text" id="sSearch" placeholder="הקלד שם יעד..." oninput="filter()" list="destinations">
+    <input type="text" id="sSearch" placeholder="חיפוש יעד..." oninput="filter()" list="destinations">
     <datalist id="destinations"></datalist>
 </div>
 
@@ -42,87 +38,72 @@
 <button class="locate-btn" onclick="safeLocate()">📍</button>
 
 <script>
-    const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
+    const scriptUrl = 'כאן_להדביק_את_הקישור_של_ה-DEPLOYMENT'; 
+
     let data = [];
-    let map, markersGroup, userMarker;
+    let map, markersGroup, userMarker, userCoords = null;
 
     function initMap() {
+        const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
+        map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [sat] });
+        markersGroup = L.layerGroup().addTo(map);
+        map.on('locationfound', (e) => {
+            userCoords = e.latlng;
+            if (userMarker) map.removeLayer(userMarker);
+            userMarker = L.circleMarker(e.latlng, {radius: 8, color: 'white', fillColor: '#2196F3', fillOpacity: 1, weight: 2}).addTo(map);
+        });
+    }
+
+    function safeLocate() { map.locate({setView: true, maxZoom: 16}); }
+
+    async function updateLocation(name) {
+        if (!userCoords) { alert("חובה להפעיל GPS (📍) קודם!"); return; }
+        if (!confirm("האם לעדכן את המיקום של " + name + " למיקום הנוכחי שלך?")) return;
+
         try {
-            const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
-            map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [sat] });
-            markersGroup = L.layerGroup().addTo(map);
-            map.on('locationfound', onLocationFound);
-            map.on('locationerror', onLocationError);
-        } catch(e) { console.error("Map Init Error", e); }
-    }
-
-    function safeLocate() {
-        map.locate({setView: true, maxZoom: 16});
-    }
-
-    function onLocationFound(e) {
-        if (userMarker) map.removeLayer(userMarker);
-        userMarker = L.circleMarker(e.latlng, {radius: 8, color: 'white', fillColor: '#2196F3', fillOpacity: 1, weight: 2}).addTo(map);
-        userMarker.bindPopup("אתה כאן").openPopup();
-    }
-
-    function onLocationError(e) {
-        alert("לא ניתן למצוא מיקום. וודא שאתה גולש ב-HTTPS ושה-GPS פעיל.");
+            const finalUrl = `${scriptUrl}?name=${encodeURIComponent(name)}&lat=${userCoords.lat}&lon=${userCoords.lng}`;
+            const res = await fetch(finalUrl, {mode: 'no-cors'}); 
+            alert("בקשת עדכון נשלחה! (השינוי יופיע בגיליון תוך דקה)");
+        } catch (e) { alert("שגיאה בשליחת עדכון"); }
     }
 
     async function load() {
         try {
-            const res = await fetch(url + "&nocache=" + Date.now());
+            const res = await fetch(csvUrl + "&nocache=" + Date.now());
             const text = await res.text();
             const lines = text.split(/\r?\n/).slice(1);
-
             data = lines.map(line => {
                 const c = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-                if (c.length < 6) return null;
                 const clean = (v) => v ? v.replace(/"/g, '').trim() : "";
-                return {
-                    type: clean(c[0]), name: clean(c[1]), lat: parseFloat(c[2]), lon: parseFloat(c[3]), pluga: clean(c[5])   
-                };
+                return { type: clean(c[0]), name: clean(c[1]), lat: parseFloat(c[2]), lon: parseFloat(c[3]), pluga: clean(c[5]) };
             }).filter(i => i && i.name && !isNaN(i.lat));
-
             fillFilters();
-            fillAutocomplete(); // מילוי רשימת ההשלמה האוטומטית
+            fillAutocomplete();
             filter();
-        } catch (e) { console.error("Data Load Error"); }
+        } catch (e) { console.error("Load error"); }
     }
 
     function fillFilters() {
         const pSel = document.getElementById('pFilter');
         const tSel = document.getElementById('tFilter');
-        const ps = [...new Set(data.map(i => i.pluga))].filter(Boolean).sort();
-        const ts = [...new Set(data.map(i => i.type))].filter(Boolean).sort();
         pSel.innerHTML = '<option value="">כל הפלוגות</option>';
         tSel.innerHTML = '<option value="">כל הסוגים</option>';
-        ps.forEach(p => pSel.add(new Option(p, p)));
-        ts.forEach(t => tSel.add(new Option(t, t)));
+        [...new Set(data.map(i => i.pluga))].filter(Boolean).sort().forEach(p => pSel.add(new Option(p, p)));
+        [...new Set(data.map(i => i.type))].filter(Boolean).sort().forEach(t => tSel.add(new Option(t, t)));
     }
 
-    // פונקציה חדשה שיוצרת את רשימת השמות להשלמה
     function fillAutocomplete() {
         const dl = document.getElementById('destinations');
         dl.innerHTML = '';
-        data.forEach(i => {
-            const opt = document.createElement('option');
-            opt.value = i.name;
-            dl.appendChild(opt);
-        });
+        data.forEach(i => { const opt = document.createElement('option'); opt.value = i.name; dl.appendChild(opt); });
     }
 
     function filter() {
         const p = document.getElementById('pFilter').value;
         const t = document.getElementById('tFilter').value;
         const s = document.getElementById('sSearch').value.toLowerCase();
-        
-        const filtered = data.filter(i => 
-            (!p || i.pluga === p) && 
-            (!t || i.type === t) && 
-            (i.name.toLowerCase().includes(s))
-        );
+        const filtered = data.filter(i => (!p || i.pluga === p) && (!t || i.type === t) && (i.name.toLowerCase().includes(s)));
         updateMap(filtered);
     }
 
@@ -130,14 +111,14 @@
         markersGroup.clearLayers();
         list.forEach(i => {
             const m = L.marker([i.lat, i.lon]);
-            m.bindPopup(`<b>${i.name}</b><br>${i.type} | פלוגה: ${i.pluga}<br><a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">Waze</a>`);
+            const content = `
+                <b>${i.name}</b><br>${i.type}<br>
+                <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">Waze</a>
+                <button class="update-btn" onclick="updateLocation('${i.name}')">📍 עדכן מיקום</button>
+            `;
+            m.bindPopup(content);
             markersGroup.addLayer(m);
         });
-        
-        // מונע קפיצות של המפה אם אנחנו בתצוגת מיקום עצמי
-        if (list.length > 0 && !userMarker) {
-            map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50]});
-        }
     }
 
     initMap();
