@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>אלפון ניווט גזרתי</title>
+    <title>אלפון ניווט - גרסה מתוקנת</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -13,6 +13,14 @@
         .filters { display: flex; gap: 5px; margin-bottom: 8px; }
         select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; }
         #map { flex-grow: 1; width: 100%; }
+        
+        .locate-btn { 
+            position: absolute; bottom: 20px; right: 20px; z-index: 1000; 
+            background: white; border: none; width: 50px; height: 50px; 
+            border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.3); 
+            cursor: pointer; font-size: 24px; display: flex; align-items: center; justify-content: center;
+        }
+        
         .leaflet-popup-content { text-align: center; font-size: 16px; direction: rtl; }
         .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; margin-top: 8px; }
     </style>
@@ -32,26 +40,29 @@
 </div>
 
 <div id="map"></div>
+<button class="locate-btn" onclick="locateUser()">📍</button>
 
 <script>
     const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
     let data = [];
-    let map, markersGroup;
+    let map, markersGroup, userMarker;
 
     function initMap() {
-        // טעינת מפות (תצ"א ומפה רגילה)
-        var satelliteMap = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
-        var streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
-
-        map = L.map('map', {
-            center: [32.11, 35.26],
-            zoom: 11,
-            layers: [satelliteMap] // מתחיל ישר בתצ"א
-        });
-
-        L.control.layers({ "תצ\"א": satelliteMap, "מפה": streetMap }, null, { collapsed: false }).addTo(map);
+        const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
+        const street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
+        map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [sat] });
+        L.control.layers({ "תצ\"א": sat, "מפה": street }, null, { collapsed: false }).addTo(map);
         markersGroup = L.layerGroup().addTo(map);
     }
+
+    function locateUser() {
+        map.locate({setView: true, maxZoom: 16});
+    }
+
+    map.on('locationfound', (e) => {
+        if (userMarker) map.removeLayer(userMarker);
+        userMarker = L.circleMarker(e.latlng, { radius: 8, color: 'white', fillColor: '#2196F3', fillOpacity: 1, weight: 2 }).addTo(map);
+    });
 
     async function load() {
         try {
@@ -61,21 +72,23 @@
 
             data = lines.map(line => {
                 const c = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-                if (c.length < 4) return null;
+                if (c.length < 6) return null; // וודא שיש מספיק עמודות
+                
+                const clean = (val) => (val || "").replace(/"/g, '').trim();
+
+                // כאן אנחנו מגדירים מי זו כל עמודה
                 return {
-                    type: c[0]?.replace(/"/g, '').trim(),
-                    name: c[1]?.replace(/"/g, '').trim(),
-                    lat: parseFloat(c[2]),
-                    lon: parseFloat(c[3]),
-                    pluga: c[5]?.replace(/"/g, '').trim()
+                    type: clean(c[0]),    // עמודה A
+                    name: clean(c[1]),    // עמודה B
+                    lat: parseFloat(c[2]), // עמודה C
+                    lon: parseFloat(c[3]), // עמודה D
+                    pluga: clean(c[5])   // עמודה F
                 };
             }).filter(i => i && i.name && !isNaN(i.lat));
 
             fillFilters();
             filter();
-        } catch (e) {
-            console.error("שגיאה בטעינה");
-        }
+        } catch (e) { alert("שגיאה בטעינת נתונים מהגיליון"); }
     }
 
     function fillFilters() {
@@ -83,6 +96,8 @@
         const ts = [...new Set(data.map(i => i.type))].filter(Boolean).sort();
         const pSel = document.getElementById('pFilter');
         const tSel = document.getElementById('tFilter');
+        pSel.innerHTML = '<option value="">כל הפלוגות</option>';
+        tSel.innerHTML = '<option value="">כל הסוגים</option>';
         ps.forEach(p => pSel.add(new Option(p, p)));
         ts.forEach(t => tSel.add(new Option(t, t)));
     }
@@ -102,23 +117,16 @@
 
     function updateMap(list) {
         markersGroup.clearLayers();
-        const points = [];
         list.forEach(i => {
             const m = L.marker([i.lat, i.lon]);
-            m.bindPopup(`
-                <b>${i.name}</b><br>
-                <small>${i.type} | פלוגה ${i.pluga}</small><br>
-                <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">Waze</a>
-            `);
+            m.bindPopup(`<b>${i.name}</b><br><small>${i.type} | פלוגה ${i.pluga}</small><br><a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">Waze</a>`);
             markersGroup.addLayer(m);
-            points.push([i.lat, i.lon]);
         });
-        if (points.length > 0) map.fitBounds(points, {padding: [50,50], maxZoom: 15});
+        if (list.length > 0) map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50], maxZoom: 15});
     }
 
     initMap();
     load();
 </script>
-
 </body>
 </html>
