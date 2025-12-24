@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>אלפון ניווט גזרתי</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -14,6 +14,14 @@
         select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; box-sizing: border-box; }
         #map { flex-grow: 1; width: 100%; }
         .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; margin-top: 10px; }
+        
+        /* כפתור מיקום עצמי - עיצוב מינימלי שלא מפריע */
+        .locate-btn { 
+            position: absolute; bottom: 25px; left: 15px; z-index: 1000; 
+            background: white; border: 2px solid rgba(0,0,0,0.2); width: 45px; height: 45px; 
+            border-radius: 5px; cursor: pointer; font-size: 22px; display: flex; 
+            align-items: center; justify-content: center; box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        }
     </style>
 </head>
 <body>
@@ -32,16 +40,29 @@
 
 <div id="map"></div>
 
+<button class="locate-btn" onclick="locateUser()">📍</button>
+
 <script>
     const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
     let data = [];
-    let map, markersGroup;
+    let map, markersGroup, userMarker;
 
     function initMap() {
         const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
         map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [sat] });
         markersGroup = L.layerGroup().addTo(map);
     }
+
+    // פונקציית מיקום פשוטה
+    function locateUser() {
+        map.locate({setView: true, maxZoom: 16});
+    }
+
+    map.on('locationfound', function(e) {
+        if (userMarker) map.removeLayer(userMarker);
+        userMarker = L.circleMarker(e.latlng, {radius: 8, color: 'white', fillColor: '#2196F3', fillOpacity: 1, weight: 2}).addTo(map);
+        userMarker.bindPopup("אתה כאן").openPopup();
+    });
 
     async function load() {
         try {
@@ -93,7 +114,7 @@
             m.bindPopup(`<b>${i.name}</b><br>${i.type} | פלוגה: ${i.pluga}<br><a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">Waze</a>`);
             markersGroup.addLayer(m);
         });
-        if (list.length > 0) map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50]});
+        if (list.length > 0 && !userMarker) map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50]});
     }
 
     initMap();
