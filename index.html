@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>אלפון ניווט גזרתי - V3.0.0</title>
+    <title>אלפון ניווט - V3.1.0</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -11,11 +11,8 @@
         .header { background: #2c3e50; color: white; padding: 10px; text-align: center; flex-shrink: 0; }
         .controls { background: white; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 1000; flex-shrink: 0; }
         .filters { display: flex; gap: 5px; margin-bottom: 8px; }
-        select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; }
-        
+        select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; box-sizing: border-box; }
         #map { flex-grow: 1; width: 100%; }
-        
-        /* עיצוב חלון קופץ (Popup) */
         .leaflet-popup-content { text-align: center; font-size: 16px; direction: rtl; }
         .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; margin-top: 8px; }
     </style>
@@ -24,15 +21,17 @@
 
 <div class="header">
     <h3 style="margin:0;">אלפון ניווט גזרתי</h3>
-    <small>גרסה 3.0.0 (מפה בלבד)</small>
+    <small>גרסה 3.1.0 (חיפוש חכם)</small>
 </div>
 
 <div class="controls">
     <div class="filters">
-        <select id="pFilter" onchange="filter()"><option value="">כל הפלוגות</option></select>
-        <select id="tFilter" onchange="filter()"><option value="">כל הסוגים</option></select>
+        <select id="pFilter" onchange="resetSearch(); filter();"><option value="">כל הפלוגות</option></select>
+        <select id="tFilter" onchange="resetSearch(); filter();"><option value="">כל הסוגים</option></select>
     </div>
-    <input type="text" id="sSearch" placeholder="חיפוש שם יעד..." oninput="filter()">
+    
+    <input type="text" id="sSearch" placeholder="הקלד שם יעד (למשל: ע...)" oninput="filter()" list="destinationsList" autocomplete="off">
+    <datalist id="destinationsList"></datalist>
 </div>
 
 <div id="map"></div>
@@ -43,17 +42,11 @@
     let map, markersGroup;
 
     function initMap() {
-        const streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' });
         const satelliteMap = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: '© Google' });
+        const streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' });
 
-        map = L.map('map', {
-            center: [32.11, 35.26],
-            zoom: 11,
-            layers: [satelliteMap]
-        });
-
-        const baseMaps = { "תצ\"א": satelliteMap, "מפה": streetMap };
-        L.control.layers(baseMaps, null, { collapsed: false }).addTo(map);
+        map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [satelliteMap] });
+        L.control.layers({ "תצ\"א": satelliteMap, "מפה": streetMap }, null, { collapsed: false }).addTo(map);
         markersGroup = L.layerGroup().addTo(map);
     }
 
@@ -82,7 +75,7 @@
 
             fillFilters();
             filter();
-        } catch (e) { console.error("Load failed", e); }
+        } catch (e) { console.error("Load error", e); }
     }
 
     function fillFilters() {
@@ -92,16 +85,33 @@
         ts.forEach(t => document.getElementById('tFilter').add(new Option(t, t)));
     }
 
+    function resetSearch() {
+        document.getElementById('sSearch').value = "";
+    }
+
     function filter() {
         const pVal = document.getElementById('pFilter').value;
         const tVal = document.getElementById('tFilter').value;
         const sVal = document.getElementById('sSearch').value.toLowerCase();
 
+        // 1. סינון הנתונים
         const filtered = data.filter(i => 
             (!pVal || i.pluga === pVal) &&
             (!tVal || i.type === tVal) &&
             (i.name.toLowerCase().includes(sVal))
         );
+
+        // 2. עדכון רשימת ההצעות (Autocomplete) - מציג רק מה שמתאים לפלוגה/סוג
+        const dataList = document.getElementById('destinationsList');
+        const currentOptions = data.filter(i => 
+            (!pVal || i.pluga === pVal) &&
+            (!tVal || i.type === tVal)
+        );
+        
+        dataList.innerHTML = currentOptions
+            .map(i => `<option value="${i.name}">`)
+            .join('');
+
         updateMap(filtered);
     }
 
