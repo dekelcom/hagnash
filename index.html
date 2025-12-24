@@ -3,30 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>אלפון ניווט - V2.9.0</title>
+    <title>אלפון ניווט גזרתי - V3.0.0</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { font-family: system-ui, sans-serif; background: #f0f2f5; margin: 0; padding: 0; direction: rtl; display: flex; flex-direction: column; height: 100vh; }
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 0; direction: rtl; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         .header { background: #2c3e50; color: white; padding: 10px; text-align: center; flex-shrink: 0; }
         .controls { background: white; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 1000; flex-shrink: 0; }
         .filters { display: flex; gap: 5px; margin-bottom: 8px; }
         select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; }
         
-        #list { flex-grow: 1; overflow-y: auto; padding: 10px; }
-        .card { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-right: 6px solid #27ae60; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .waze-btn { background: #33ccff; color: white; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; }
+        #map { flex-grow: 1; width: 100%; }
         
-        #map { height: 35vh; width: 100%; border-top: 2px solid #ddd; flex-shrink: 0; }
-        /* עיצוב בורר השכבות שיהיה נוח בנייד */
-        .leaflet-control-layers { font-size: 14px; font-weight: bold; }
+        /* עיצוב חלון קופץ (Popup) */
+        .leaflet-popup-content { text-align: center; font-size: 16px; direction: rtl; }
+        .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; margin-top: 8px; }
     </style>
 </head>
 <body>
 
 <div class="header">
     <h3 style="margin:0;">אלפון ניווט גזרתי</h3>
-    <small>גרסה 2.9.0 (תמיכה בתצ"א)</small>
+    <small>גרסה 3.0.0 (מפה בלבד)</small>
 </div>
 
 <div class="controls">
@@ -34,10 +32,9 @@
         <select id="pFilter" onchange="filter()"><option value="">כל הפלוגות</option></select>
         <select id="tFilter" onchange="filter()"><option value="">כל הסוגים</option></select>
     </div>
-    <input type="text" id="sSearch" placeholder="חיפוש יעד..." oninput="filter()">
+    <input type="text" id="sSearch" placeholder="חיפוש שם יעד..." oninput="filter()">
 </div>
 
-<div id="list">טוען נתונים...</div>
 <div id="map"></div>
 
 <script>
@@ -46,27 +43,16 @@
     let map, markersGroup;
 
     function initMap() {
-        // שכבת מפת דרכים
-        const streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        });
-
-        // שכבת תצ"א (Google Hybrid - כולל שמות רחובות)
-        const satelliteMap = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-            attribution: '© Google Maps'
-        });
+        const streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' });
+        const satelliteMap = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: '© Google' });
 
         map = L.map('map', {
             center: [32.11, 35.26],
             zoom: 11,
-            layers: [satelliteMap] // ברירת מחדל תצ"א
+            layers: [satelliteMap]
         });
 
-        const baseMaps = {
-            "תצלום אוויר (תצ\"א)": satelliteMap,
-            "מפת דרכים": streetMap
-        };
-
+        const baseMaps = { "תצ\"א": satelliteMap, "מפה": streetMap };
         L.control.layers(baseMaps, null, { collapsed: false }).addTo(map);
         markersGroup = L.layerGroup().addTo(map);
     }
@@ -92,20 +78,18 @@
                     lon: cleanNum(c[3]),
                     pluga: c[5]?.replace(/"/g, '').trim()
                 };
-            }).filter(i => i && i.name);
+            }).filter(i => i && i.name && !isNaN(i.lat));
 
             fillFilters();
             filter();
-        } catch (e) { document.getElementById('list').innerHTML = "שגיאה בטעינה"; }
+        } catch (e) { console.error("Load failed", e); }
     }
 
     function fillFilters() {
-        const pSel = document.getElementById('pFilter');
-        const tSel = document.getElementById('tFilter');
         const ps = [...new Set(data.map(i => i.pluga))].filter(Boolean).sort();
         const ts = [...new Set(data.map(i => i.type))].filter(Boolean).sort();
-        ps.forEach(p => pSel.add(new Option(p, p)));
-        ts.forEach(t => tSel.add(new Option(t, t)));
+        ps.forEach(p => document.getElementById('pFilter').add(new Option(p, p)));
+        ts.forEach(t => document.getElementById('tFilter').add(new Option(t, t)));
     }
 
     function filter() {
@@ -118,28 +102,23 @@
             (!tVal || i.type === tVal) &&
             (i.name.toLowerCase().includes(sVal))
         );
-        render(filtered);
+        updateMap(filtered);
     }
 
-    function render(list) {
-        const listDiv = document.getElementById('list');
-        listDiv.innerHTML = list.length ? list.map(i => `
-            <div class="card">
-                <div><b>${i.name}</b><br><small>${i.type} | פלוגה ${i.pluga}</small></div>
-                <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-btn">Waze</a>
-            </div>
-        `).join('') : "<div style='padding:20px;text-align:center;'>לא נמצאו תוצאות</div>";
-
+    function updateMap(list) {
         markersGroup.clearLayers();
         const points = [];
         list.forEach(i => {
-            if (!isNaN(i.lat)) {
-                const m = L.marker([i.lat, i.lon]).bindPopup(`<b>${i.name}</b>`);
-                markersGroup.addLayer(m);
-                points.push([i.lat, i.lon]);
-            }
+            const m = L.marker([i.lat, i.lon]);
+            m.bindPopup(`
+                <b>${i.name}</b><br>
+                <small>${i.type} | פלוגה ${i.pluga}</small><br>
+                <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">ניווט Waze</a>
+            `);
+            markersGroup.addLayer(m);
+            points.push([i.lat, i.lon]);
         });
-        if (points.length > 0) map.fitBounds(points, {padding: [30,30], maxZoom: 15});
+        if (points.length > 0) map.fitBounds(points, {padding: [50,50], maxZoom: 15});
     }
 
     initMap();
