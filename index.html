@@ -34,7 +34,8 @@
         <select id="pFilter" onchange="filter()"><option value="">כל הפלוגות</option></select>
         <select id="tFilter" onchange="filter()"><option value="">כל הסוגים</option></select>
     </div>
-    <input type="text" id="sSearch" placeholder="חיפוש חופשי..." oninput="filter()">
+    <input type="text" id="sSearch" placeholder="הקלד שם יעד..." oninput="filter()" list="destinations">
+    <datalist id="destinations"></datalist>
 </div>
 
 <div id="map"></div>
@@ -45,21 +46,17 @@
     let data = [];
     let map, markersGroup, userMarker;
 
-    // איתחול בסיסי - תמיד יעבוד
     function initMap() {
         try {
             const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
             map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [sat] });
             markersGroup = L.layerGroup().addTo(map);
-            
-            // הגדרת אירועי מיקום בצורה בטוחה
             map.on('locationfound', onLocationFound);
             map.on('locationerror', onLocationError);
         } catch(e) { console.error("Map Init Error", e); }
     }
 
     function safeLocate() {
-        console.log("מנסה למצוא מיקום...");
         map.locate({setView: true, maxZoom: 16});
     }
 
@@ -70,7 +67,7 @@
     }
 
     function onLocationError(e) {
-        alert("לא ניתן לגשת למיקום. וודא שאתה גולש ב-HTTPS וה-GPS פעיל.");
+        alert("לא ניתן למצוא מיקום. וודא שאתה גולש ב-HTTPS ושה-GPS פעיל.");
     }
 
     async function load() {
@@ -89,6 +86,7 @@
             }).filter(i => i && i.name && !isNaN(i.lat));
 
             fillFilters();
+            fillAutocomplete(); // מילוי רשימת ההשלמה האוטומטית
             filter();
         } catch (e) { console.error("Data Load Error"); }
     }
@@ -104,11 +102,27 @@
         ts.forEach(t => tSel.add(new Option(t, t)));
     }
 
+    // פונקציה חדשה שיוצרת את רשימת השמות להשלמה
+    function fillAutocomplete() {
+        const dl = document.getElementById('destinations');
+        dl.innerHTML = '';
+        data.forEach(i => {
+            const opt = document.createElement('option');
+            opt.value = i.name;
+            dl.appendChild(opt);
+        });
+    }
+
     function filter() {
         const p = document.getElementById('pFilter').value;
         const t = document.getElementById('tFilter').value;
         const s = document.getElementById('sSearch').value.toLowerCase();
-        const filtered = data.filter(i => (!p || i.pluga === p) && (!t || i.type === t) && (i.name.toLowerCase().includes(s)));
+        
+        const filtered = data.filter(i => 
+            (!p || i.pluga === p) && 
+            (!t || i.type === t) && 
+            (i.name.toLowerCase().includes(s))
+        );
         updateMap(filtered);
     }
 
@@ -119,7 +133,11 @@
             m.bindPopup(`<b>${i.name}</b><br>${i.type} | פלוגה: ${i.pluga}<br><a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">Waze</a>`);
             markersGroup.addLayer(m);
         });
-        if (list.length > 0 && !userMarker) map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50]});
+        
+        // מונע קפיצות של המפה אם אנחנו בתצוגת מיקום עצמי
+        if (list.length > 0 && !userMarker) {
+            map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50]});
+        }
     }
 
     initMap();
