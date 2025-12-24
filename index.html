@@ -3,40 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>אלפון ניווט גזרתי - V3.3.1</title>
+    <title>אלפון ניווט - V3.3.2</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; direction: rtl; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #f4f7f6; }
-        .header { background: #2c3e50; color: white; padding: 10px; text-align: center; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 0; direction: rtl; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #f4f7f6; }
+        .header { background: #2c3e50; color: white; padding: 10px; text-align: center; flex-shrink: 0; }
         .controls { background: white; padding: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; flex-shrink: 0; }
         .filters { display: flex; gap: 8px; margin-bottom: 10px; }
-        select, input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ccc; font-size: 16px; background: white; box-sizing: border-box; outline: none; }
-        select:focus, input:focus { border-color: #3498db; }
-        
-        #map { flex-grow: 1; width: 100%; }
-        
-        /* כפתור מיקום עצמי צף */
-        .locate-btn { 
-            position: absolute; bottom: 30px; right: 20px; z-index: 1000; 
-            background: white; border: none; width: 60px; height: 60px; 
-            border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
-            cursor: pointer; font-size: 30px; display: flex; align-items: center; justify-content: center;
-            transition: transform 0.2s;
-        }
-        .locate-btn:active { transform: scale(0.9); }
-
-        /* עיצוב הבלון במפה */
-        .leaflet-popup-content { text-align: center; min-width: 160px; font-family: sans-serif; }
-        .waze-link { display: block; background: #33ccff; color: white; text-decoration: none; padding: 12px; border-radius: 8px; font-weight: bold; margin-top: 10px; font-size: 16px; }
-        .update-btn { display: block; background: #e67e22; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; margin-top: 8px; cursor: pointer; width: 100%; font-size: 14px; }
+        select, input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ccc; font-size: 16px; background: white; box-sizing: border-box; }
+        #map { flex-grow: 1; width: 100%; background: #eee; }
+        .locate-btn { position: absolute; bottom: 30px; right: 20px; z-index: 1000; background: white; border: none; width: 60px; height: 60px; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer; font-size: 30px; display: flex; align-items: center; justify-content: center; }
+        .status-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: white; padding: 15px; border-radius: 10px; z-index: 2000; display: none; text-align: center; }
     </style>
 </head>
 <body>
 
+<div id="status" class="status-msg">טוען נתונים...</div>
+
 <div class="header">
-    <h3 style="margin:0; font-size: 1.2rem;">אלפון ניווט גזרתי</h3>
-    <small style="opacity: 0.9;">מפה חכמה ועדכון מהשטח</small>
+    <h3 style="margin:0;">אלפון ניווט גזרתי</h3>
+    <small>גרסה 3.3.2 (Safe Mode)</small>
 </div>
 
 <div class="controls">
@@ -44,15 +31,14 @@
         <select id="pFilter" onchange="resetSearch(); filter();"><option value="">כל הפלוגות</option></select>
         <select id="tFilter" onchange="resetSearch(); filter();"><option value="">כל הסוגים</option></select>
     </div>
-    <input type="text" id="sSearch" placeholder="חיפוש שם יעד (למשל: עקרבה...)" oninput="filter()" list="destinationsList" autocomplete="off">
+    <input type="text" id="sSearch" placeholder="חיפוש שם יעד..." oninput="filter()" list="destinationsList" autocomplete="off">
     <datalist id="destinationsList"></datalist>
 </div>
 
 <div id="map"></div>
-<button class="locate-btn" onclick="locateUser()" title="מרכז אותי">📍</button>
+<button class="locate-btn" onclick="locateUser()">📍</button>
 
 <script>
-    // הקישורים המעודכנים שלך
     const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv'; 
     const scriptUrl = 'https://script.google.com/macros/s/AKfycbz59ojIxoa_o5MTDtpwKYRCRxkU9R5oridtfu6_815PDJDV0tY-sjrANfnlehKRQCzj/exec'; 
 
@@ -60,52 +46,57 @@
     let map, markersGroup, userMarker;
 
     function initMap() {
-        // שכבות מפה
-        const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google Satellite' });
+        const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
         const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
-
         map = L.map('map', { center: [32.11, 35.26], zoom: 11, layers: [sat] });
-        
-        L.control.layers({ "תצ\"א": sat, "מפת דרכים": osm }, null, { collapsed: true }).addTo(map);
+        L.control.layers({ "תצ\"א": sat, "מפה": osm }, null, { collapsed: true }).addTo(map);
         markersGroup = L.layerGroup().addTo(map);
     }
 
     async function loadData() {
+        const status = document.getElementById('status');
+        status.style.display = 'block';
         try {
-            const res = await fetch(csvUrl + "&cache=" + Date.now());
+            const res = await fetch(csvUrl + "&cb=" + Date.now());
+            if (!res.ok) throw new Error("Connection failed");
             const text = await res.text();
             const lines = text.split(/\r?\n/).slice(1);
             
             data = lines.map((line, index) => {
-                const c = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-                if (c.length < 4) return null;
-                return {
-                    id: index + 2, // מספר השורה בגיליון לצרכי עדכון
-                    type: c[0]?.replace(/"/g, '').trim(),
-                    name: c[1]?.replace(/"/g, '').trim(),
-                    lat: parseFloat(c[2]),
-                    lon: parseFloat(c[3]),
-                    pluga: c[5]?.replace(/"/g, '').trim()
-                };
-            }).filter(i => i && i.name && !isNaN(i.lat));
+                try {
+                    const c = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                    if (c.length < 4) return null;
+                    const lat = parseFloat(c[2]);
+                    const lon = parseFloat(c[3]);
+                    if (isNaN(lat) || isNaN(lon)) return null;
+                    return {
+                        id: index + 2,
+                        type: (c[0] || "כללי").replace(/"/g, '').trim(),
+                        name: (c[1] || "ללא שם").replace(/"/g, '').trim(),
+                        lat: lat,
+                        lon: lon,
+                        pluga: (c[5] || "כללי").replace(/"/g, '').trim()
+                    };
+                } catch(e) { return null; }
+            }).filter(i => i !== null);
 
-            fillFilters();
-            filter();
+            if (data.length === 0) {
+                status.innerHTML = "הקובץ נטען אך הוא ריק או לא תקין";
+            } else {
+                status.style.display = 'none';
+                fillFilters();
+                filter();
+            }
         } catch (e) {
+            status.innerHTML = "שגיאה בטעינה: וודא שיש אינטרנט והגיליון פורסם";
             console.error(e);
-            alert("שגיאה בטעינת הנתונים. וודא שהגיליון פורסם ל-CSV.");
         }
     }
 
-    function locateUser() {
-        map.locate({setView: true, maxZoom: 16, enableHighAccuracy: true});
-    }
-
+    function locateUser() { map.locate({setView: true, maxZoom: 16, enableHighAccuracy: true}); }
     map.on('locationfound', (e) => {
         if (userMarker) map.removeLayer(userMarker);
-        userMarker = L.circleMarker(e.latlng, {
-            radius: 10, color: '#fff', fillColor: '#2ecc71', fillOpacity: 1, weight: 3
-        }).addTo(map).bindPopup("אתה כאן").openPopup();
+        userMarker = L.circleMarker(e.latlng, { radius: 10, color: '#fff', fillColor: '#2ecc71', fillOpacity: 1, weight: 3 }).addTo(map);
     });
 
     function fillFilters() {
@@ -120,20 +111,14 @@
     function resetSearch() { document.getElementById('sSearch').value = ""; }
 
     function filter() {
-        const pVal = document.getElementById('pFilter').value;
-        const tVal = document.getElementById('tFilter').value;
-        const sVal = document.getElementById('sSearch').value.toLowerCase();
-
-        const filtered = data.filter(i => 
-            (!pVal || i.pluga === pVal) &&
-            (!tVal || i.type === tVal) &&
-            (i.name.toLowerCase().includes(sVal))
-        );
-
-        // עדכון רשימת Autocomplete (רק מה שרלוונטי לסינון הנוכחי)
-        const dl = document.getElementById('destinationsList');
-        dl.innerHTML = data.filter(i => (!pVal || i.pluga === pVal) && (!tVal || i.type === tVal))
-                           .map(i => `<option value="${i.name}">`).join('');
+        const p = document.getElementById('pFilter').value;
+        const t = document.getElementById('tFilter').value;
+        const s = document.getElementById('sSearch').value.toLowerCase();
+        const filtered = data.filter(i => (!p || i.pluga === p) && (!t || i.type === t) && (i.name.toLowerCase().includes(s)));
+        
+        document.getElementById('destinationsList').innerHTML = data
+            .filter(i => (!p || i.pluga === p) && (!t || i.type === t))
+            .map(i => `<option value="${i.name}">`).join('');
 
         updateMarkers(filtered);
     }
@@ -141,47 +126,31 @@
     function updateMarkers(list) {
         markersGroup.clearLayers();
         list.forEach(i => {
-            const m = L.marker([i.lat, i.lon]);
-            m.bindPopup(`
-                <div style="direction:rtl;">
-                    <b>${i.name}</b><br>
-                    <small>${i.type} | פלוגה ${i.pluga}</small>
-                    <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">ניווט Waze</a>
-                    <button class="update-btn" onclick="sendUpdate(${i.id}, '${i.name}')">📌 עדכן מיקום מהשטח</button>
+            const m = L.marker([i.lat, i.lon]).bindPopup(`
+                <div style="direction:rtl; text-align:center;">
+                    <b>${i.name}</b><br><small>${i.type} | פלוגה ${i.pluga}</small>
+                    <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" style="display:block; background:#33ccff; color:white; padding:10px; border-radius:8px; text-decoration:none; margin-top:10px; font-weight:bold;">Waze</a>
+                    <button onclick="sendUpdate(${i.id}, '${i.name}')" style="display:block; width:100%; background:#e67e22; color:white; border:none; padding:10px; border-radius:8px; margin-top:8px; font-weight:bold; cursor:pointer;">📌 עדכן מיקום מהשטח</button>
                 </div>
             `);
             markersGroup.addLayer(m);
         });
-        
-        if (list.length > 0 && list.length < data.length) {
-            map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50], maxZoom: 15});
-        }
+        if (list.length > 0) map.fitBounds(list.map(i => [i.lat, i.lon]), {padding: [50,50], maxZoom: 15});
     }
 
     async function sendUpdate(rowId, name) {
-        if (!userMarker) {
-            alert("קודם לחץ על ה-📍 כדי שהמפה תזהה איפה אתה נמצא.");
-            return;
-        }
-        
-        if (!confirm(`האם לעדכן את המיקום של ${name} לנקודה שבה אתה נמצא כרגע?`)) return;
-
+        if (!userMarker) return alert("לחץ על 📍 קודם");
+        if (!confirm(`לעדכן את ${name}?`)) return;
         const pos = userMarker.getLatLng();
-        const fullUrl = `${scriptUrl}?row=${rowId}&lat=${pos.lat}&lon=${pos.lng}`;
-        
         try {
-            // שליחה ללא המתנה לתשובה (no-cors)
-            fetch(fullUrl, { mode: 'no-cors' });
-            alert("הבקשה נשלחה! הגיליון יתעדכן בתוך מספר שניות.");
-            setTimeout(() => location.reload(), 2000);
-        } catch (e) {
-            alert("תקלה בשליחת העדכון.");
-        }
+            fetch(`${scriptUrl}?row=${rowId}&lat=${pos.lat}&lon=${pos.lng}`, { mode: 'no-cors' });
+            alert("נשלח לעדכון!");
+            setTimeout(() => location.reload(), 1500);
+        } catch (e) { alert("תקלה"); }
     }
 
     initMap();
     loadData();
 </script>
-
 </body>
 </html>
