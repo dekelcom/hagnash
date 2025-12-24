@@ -3,56 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>אלפון ניווט מבצעי - מפה וסינון</title>
+    <title>אלפון ניווט דינמי - V1.1.0</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root { --primary: #2c3e50; --accent: #27ae60; --waze: #33ccff; }
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #f4f4f4; }
-        
-        .header { background: var(--primary); color: white; padding: 10px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-        
-        .controls { background: white; padding: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; z-index: 1000; }
-        select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: #fff; }
+        body { font-family: system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #f4f4f4; overflow: hidden; }
+        .header { background: var(--primary); color: white; padding: 10px; text-align: center; }
+        .controls { background: white; padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        select, input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 15px; box-sizing: border-box; }
         .full-width { grid-column: span 2; }
-
-        #map { flex-grow: 1; width: 100%; z-index: 1; }
-
-        .leaflet-popup-content { text-align: center; font-family: sans-serif; }
-        .waze-link { display: inline-block; margin-top: 10px; background: var(--waze); color: white; padding: 8px 15px; border-radius: 5px; text-decoration: none; font-weight: bold; }
+        #map { flex-grow: 1; width: 100%; }
+        .version-tag { font-size: 10px; color: #777; position: fixed; bottom: 5px; left: 5px; z-index: 1001; background: rgba(255,255,255,0.7); padding: 2px 5px; border-radius: 3px; }
+        .waze-link { display: block; margin-top: 8px; background: var(--waze); color: white; text-align: center; padding: 8px; border-radius: 5px; text-decoration: none; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h2 style="margin:0; font-size: 1.2rem;">אלפון ניווט גזרתי</h2>
+    <h2 style="margin:0; font-size: 1.1rem;">אלפון ניווט גזרתי</h2>
 </div>
 
 <div class="controls">
     <select id="plugaFilter" onchange="updateFilters()">
         <option value="">כל הפלוגות</option>
     </select>
-
     <select id="typeFilter" onchange="updateFilters()">
         <option value="">כל הסוגים</option>
     </select>
-
-    <input type="text" id="nameSearch" class="full-width" placeholder="חפש שם יעד ספציפי..." oninput="updateFilters()">
+    <input type="text" id="nameSearch" class="full-width" placeholder="חפש שם יעד..." oninput="updateFilters()">
 </div>
 
 <div id="map"></div>
+<div class="version-tag">Version 1.1.0</div>
 
 <script>
+    const APP_VERSION = "1.1.0";
+    console.log("Starting Alfon Nav App Version: " + APP_VERSION);
+
     const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
     let allLocations = [];
     let map, markersGroup;
 
-    // אתחול המפה
     function initMap() {
         map = L.map('map').setView([32.08, 35.28], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
+        
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' });
+        const satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: '© Google' });
+
+        osm.addTo(map);
+        const baseMaps = { "מפה רגילה": osm, "לוויין": satellite };
+        L.control.layers(baseMaps).addTo(map);
+        
         markersGroup = L.layerGroup().addTo(map);
     }
 
@@ -69,7 +71,7 @@
                     name: cols[1]?.trim(),
                     lat: parseFloat(cols[2]),
                     lon: parseFloat(cols[3]),
-                    pluga: cols[5]?.trim() // עמודה F
+                    pluga: cols[5]?.trim() // עמודה F 
                 };
             }).filter(loc => loc.name && !isNaN(loc.lat));
 
@@ -79,14 +81,14 @@
     }
 
     function populateSelectors() {
-        const plugas = [...new Set(allLocations.map(l => l.pluga))].sort();
-        const types = [...new Set(allLocations.map(l => l.type))].sort();
+        const plugas = [...new Set(allLocations.map(l => l.pluga))].filter(Boolean).sort();
+        const types = [...new Set(allLocations.map(l => l.type))].filter(Boolean).sort();
         
         const pSelect = document.getElementById('plugaFilter');
-        plugas.forEach(p => p && pSelect.add(new Option(p, p)));
+        plugas.forEach(p => pSelect.add(new Option(p, p)));
 
         const tSelect = document.getElementById('typeFilter');
-        types.forEach(t => t && tSelect.add(new Option(t, t)));
+        types.forEach(t => tSelect.add(new Option(t, t)));
     }
 
     function updateFilters() {
@@ -111,10 +113,10 @@
         data.forEach(loc => {
             const marker = L.marker([loc.lat, loc.lon]);
             const popupContent = `
-                <div>
+                <div style="direction:rtl; text-align:right;">
                     <strong>${loc.name}</strong><br>
                     ${loc.type} | פלוגה: ${loc.pluga}<br>
-                    <a href="https://waze.com/ul?ll=${loc.lat},${loc.lon}&navigate=yes" target="_blank" class="waze-link">ניווט עם Waze</a>
+                    <a href="https://waze.com/ul?ll=${loc.lat},${loc.lon}&navigate=yes" target="_blank" class="waze-link">ניווט Waze</a>
                 </div>
             `;
             marker.bindPopup(popupContent);
@@ -122,14 +124,11 @@
             bounds.push([loc.lat, loc.lon]);
         });
 
-        if (bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [50, 50] });
-        }
+        if (bounds.length > 0) map.fitBounds(bounds, { padding: [40, 40] });
     }
 
     initMap();
     loadData();
 </script>
-
 </body>
 </html>
