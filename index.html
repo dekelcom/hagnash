@@ -3,91 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>אלפון ניווט דינמי</title>
+    <title>אלפון ניווט מבצעי - מפה וסינון</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --primary: #2c3e50; --accent: #3498db; --waze: #33ccff; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; margin: 0; padding: 15px; }
-        .header { background: var(--primary); color: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
-        .search-container { position: sticky; top: 10px; z-index: 100; margin-bottom: 20px; }
-        input { width: 100%; padding: 15px; border-radius: 10px; border: 2px solid #ddd; font-size: 18px; box-sizing: border-box; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        .card { background: white; margin-bottom: 12px; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border-right: 5px solid var(--accent); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .card-info h3 { margin: 0 0 5px 0; font-size: 18px; color: #333; }
-        .card-info p { margin: 0; font-size: 14px; color: #777; }
-        .nav-btn { background: var(--waze); color: white; text-decoration: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; font-size: 14px; }
-        .tag { font-size: 11px; background: #eee; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
-        #loader { text-align: center; padding: 20px; color: var(--primary); font-weight: bold; }
+        :root { --primary: #2c3e50; --accent: #27ae60; --waze: #33ccff; }
+        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #f4f4f4; }
+        
+        .header { background: var(--primary); color: white; padding: 10px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        
+        .controls { background: white; padding: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; z-index: 1000; }
+        select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: #fff; }
+        .full-width { grid-column: span 2; }
+
+        #map { flex-grow: 1; width: 100%; z-index: 1; }
+
+        .leaflet-popup-content { text-align: center; font-family: sans-serif; }
+        .waze-link { display: inline-block; margin-top: 10px; background: var(--waze); color: white; padding: 8px 15px; border-radius: 5px; text-decoration: none; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h2>אלפון ניווט דינמי</h2>
+    <h2 style="margin:0; font-size: 1.2rem;">אלפון ניווט גזרתי</h2>
 </div>
 
-<div class="search-container">
-    <input type="text" id="searchInput" placeholder="חפש יישוב, צומת, מוצב..." oninput="search()">
+<div class="controls">
+    <select id="plugaFilter" onchange="updateFilters()">
+        <option value="">כל הפלוגות</option>
+    </select>
+
+    <select id="typeFilter" onchange="updateFilters()">
+        <option value="">כל הסוגים</option>
+    </select>
+
+    <input type="text" id="nameSearch" class="full-width" placeholder="חפש שם יעד ספציפי..." oninput="updateFilters()">
 </div>
 
-<div id="loader">טוען נתונים מהגיליון...</div>
-<div id="list"></div>
+<div id="map"></div>
 
 <script>
     const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
     let allLocations = [];
+    let map, markersGroup;
 
-    // פונקציה לטעינת הנתונים מה-Google Sheets
+    // אתחול המפה
+    function initMap() {
+        map = L.map('map').setView([32.08, 35.28], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+        markersGroup = L.layerGroup().addTo(map);
+    }
+
     async function loadData() {
         try {
             const response = await fetch(csvUrl);
             const data = await response.text();
-            const rows = data.split('\n').slice(1); // דילוג על שורת הכותרת
+            const rows = data.split('\n').slice(1);
             
             allLocations = rows.map(row => {
-                const columns = row.split(',');
+                const cols = row.split(',');
                 return {
-                    type: columns[0],
-                    name: columns[1],
-                    lat: columns[2],
-                    lon: columns[3],
-                    pluga: columns[5] // עמודה F בגיליון שלך
+                    type: cols[0]?.trim(),
+                    name: cols[1]?.trim(),
+                    lat: parseFloat(cols[2]),
+                    lon: parseFloat(cols[3]),
+                    pluga: cols[5]?.trim() // עמודה F
                 };
-            }).filter(loc => loc.name); // סינון שורות ריקות
+            }).filter(loc => loc.name && !isNaN(loc.lat));
 
-            document.getElementById('loader').style.display = 'none';
-            render(allLocations);
-        } catch (error) {
-            document.getElementById('loader').innerText = 'שגיאה בטעינת הנתונים.';
-            console.error(error);
+            populateSelectors();
+            updateFilters();
+        } catch (e) { console.error("Error loading CSV:", e); }
+    }
+
+    function populateSelectors() {
+        const plugas = [...new Set(allLocations.map(l => l.pluga))].sort();
+        const types = [...new Set(allLocations.map(l => l.type))].sort();
+        
+        const pSelect = document.getElementById('plugaFilter');
+        plugas.forEach(p => p && pSelect.add(new Option(p, p)));
+
+        const tSelect = document.getElementById('typeFilter');
+        types.forEach(t => t && tSelect.add(new Option(t, t)));
+    }
+
+    function updateFilters() {
+        const pluga = document.getElementById('plugaFilter').value;
+        const type = document.getElementById('typeFilter').value;
+        const search = document.getElementById('nameSearch').value.toLowerCase();
+
+        const filtered = allLocations.filter(l => {
+            return (!pluga || l.pluga === pluga) &&
+                   (!type || l.type === type) &&
+                   (!search || l.name.toLowerCase().includes(search));
+        });
+
+        displayOnMap(filtered);
+    }
+
+    function displayOnMap(data) {
+        markersGroup.clearLayers();
+        if (data.length === 0) return;
+
+        const bounds = [];
+        data.forEach(loc => {
+            const marker = L.marker([loc.lat, loc.lon]);
+            const popupContent = `
+                <div>
+                    <strong>${loc.name}</strong><br>
+                    ${loc.type} | פלוגה: ${loc.pluga}<br>
+                    <a href="https://waze.com/ul?ll=${loc.lat},${loc.lon}&navigate=yes" target="_blank" class="waze-link">ניווט עם Waze</a>
+                </div>
+            `;
+            marker.bindPopup(popupContent);
+            markersGroup.addLayer(marker);
+            bounds.push([loc.lat, loc.lon]);
+        });
+
+        if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [50, 50] });
         }
     }
 
-    function search() {
-        const query = document.getElementById('searchInput').value.toLowerCase();
-        const filtered = allLocations.filter(loc => 
-            loc.name.toLowerCase().includes(query) || 
-            (loc.type && loc.type.toLowerCase().includes(query)) ||
-            (loc.pluga && loc.pluga.toLowerCase().includes(query))
-        );
-        render(filtered);
-    }
-
-    function render(data) {
-        const container = document.getElementById('list');
-        container.innerHTML = data.map(loc => `
-            <div class="card">
-                <div class="card-info">
-                    <h3>${loc.name}</h3>
-                    <p>
-                        <span class="tag">${loc.type || ''}</span>
-                        <span>פלוגה: ${loc.pluga || ''}</span>
-                    </p>
-                </div>
-                <a href="https://waze.com/ul?ll=${loc.lat},${loc.lon}&navigate=yes" class="nav-btn">Waze</a>
-            </div>
-        `).join('');
-    }
-
-    // הפעלה בטעינה
+    initMap();
     loadData();
 </script>
 
