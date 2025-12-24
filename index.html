@@ -3,19 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>אלפון ניווט דינמי - V1.1.0</title>
+    <title>אלפון ניווט גזרתי - V1.2.1</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root { --primary: #2c3e50; --accent: #27ae60; --waze: #33ccff; }
         body { font-family: system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #f4f4f4; overflow: hidden; }
-        .header { background: var(--primary); color: white; padding: 10px; text-align: center; }
+        .header { background: var(--primary); color: white; padding: 10px; text-align: center; z-index: 1001; }
         .controls { background: white; padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        select, input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 15px; box-sizing: border-box; }
+        select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; }
         .full-width { grid-column: span 2; }
         #map { flex-grow: 1; width: 100%; }
+        
+        .locate-btn { 
+            position: absolute; bottom: 25px; right: 10px; z-index: 1000; 
+            background: white; border: none; width: 45px; height: 45px; 
+            border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.3); 
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 24px;
+        }
+
         .version-tag { font-size: 10px; color: #777; position: fixed; bottom: 5px; left: 5px; z-index: 1001; background: rgba(255,255,255,0.7); padding: 2px 5px; border-radius: 3px; }
-        .waze-link { display: block; margin-top: 8px; background: var(--waze); color: white; text-align: center; padding: 8px; border-radius: 5px; text-decoration: none; font-weight: bold; }
+        .waze-link { display: block; margin-top: 10px; background: var(--waze); color: white; text-align: center; padding: 12px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; }
+        
+        /* עיצוב הבועה במפה */
+        .popup-container { direction: rtl; text-align: right; min-width: 160px; }
+        .popup-title { font-size: 18px; margin-bottom: 4px; display: block; color: #333; }
+        .popup-sub { font-size: 14px; color: #666; display: block; margin-bottom: 2px; }
     </style>
 </head>
 <body>
@@ -31,31 +45,35 @@
     <select id="typeFilter" onchange="updateFilters()">
         <option value="">כל הסוגים</option>
     </select>
-    <input type="text" id="nameSearch" class="full-width" placeholder="חפש שם יעד..." oninput="updateFilters()">
+    <input type="text" id="nameSearch" class="full-width" placeholder="חיפוש שם יעד..." oninput="updateFilters()">
 </div>
 
 <div id="map"></div>
-<div class="version-tag">Version 1.1.0</div>
+
+<button class="locate-btn" onclick="locateUser()" title="המיקום שלי">📍</button>
+
+<div class="version-tag">Version 1.2.1</div>
 
 <script>
-    const APP_VERSION = "1.1.0";
-    console.log("Starting Alfon Nav App Version: " + APP_VERSION);
-
+    const APP_VERSION = "1.2.1";
     const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
+    
     let allLocations = [];
-    let map, markersGroup;
+    let map, markersGroup, userMarker;
 
     function initMap() {
         map = L.map('map').setView([32.08, 35.28], 12);
-        
         const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' });
         const satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: '© Google' });
 
         osm.addTo(map);
-        const baseMaps = { "מפה רגילה": osm, "לוויין": satellite };
-        L.control.layers(baseMaps).addTo(map);
-        
+        L.control.layers({ "מפה": osm, "לוויין": satellite }).addTo(map);
         markersGroup = L.layerGroup().addTo(map);
+    }
+
+    // פונקציה לניקוי גרשיים מהטקסט שמגיע מה-CSV
+    function cleanStr(str) {
+        return str ? str.replace(/"/g, '').trim() : '';
     }
 
     async function loadData() {
@@ -67,11 +85,11 @@
             allLocations = rows.map(row => {
                 const cols = row.split(',');
                 return {
-                    type: cols[0]?.trim(),
-                    name: cols[1]?.trim(),
+                    type: cleanStr(cols[0]),
+                    name: cleanStr(cols[1]),
                     lat: parseFloat(cols[2]),
                     lon: parseFloat(cols[3]),
-                    pluga: cols[5]?.trim() // עמודה F 
+                    pluga: cleanStr(cols[5])
                 };
             }).filter(loc => loc.name && !isNaN(loc.lat));
 
@@ -81,14 +99,11 @@
     }
 
     function populateSelectors() {
-        const plugas = [...new Set(allLocations.map(l => l.pluga))].filter(Boolean).sort();
-        const types = [...new Set(allLocations.map(l => l.type))].filter(Boolean).sort();
-        
         const pSelect = document.getElementById('plugaFilter');
-        plugas.forEach(p => pSelect.add(new Option(p, p)));
-
         const tSelect = document.getElementById('typeFilter');
-        types.forEach(t => tSelect.add(new Option(t, t)));
+        
+        [...new Set(allLocations.map(l => l.pluga))].filter(Boolean).sort().forEach(p => pSelect.add(new Option(p, p)));
+        [...new Set(allLocations.map(l => l.type))].filter(Boolean).sort().forEach(t => tSelect.add(new Option(t, t)));
     }
 
     function updateFilters() {
@@ -112,20 +127,33 @@
         const bounds = [];
         data.forEach(loc => {
             const marker = L.marker([loc.lat, loc.lon]);
-            const popupContent = `
-                <div style="direction:rtl; text-align:right;">
-                    <strong>${loc.name}</strong><br>
-                    ${loc.type} | פלוגה: ${loc.pluga}<br>
-                    <a href="https://waze.com/ul?ll=${loc.lat},${loc.lon}&navigate=yes" target="_blank" class="waze-link">ניווט Waze</a>
+            
+            // טקסט מתוקן וברור ב-Popup
+            const popupHTML = `
+                <div class="popup-container">
+                    <b class="popup-title">${loc.name}</b>
+                    <span class="popup-sub"><b>סוג:</b> ${loc.type}</span>
+                    <span class="popup-sub"><b>גזרה:</b> פלוגת ${loc.pluga}</span>
+                    <a href="https://waze.com/ul?ll=${loc.lat},${loc.lon}&navigate=yes" target="_blank" class="waze-link">ניווט עם Waze</a>
                 </div>
             `;
-            marker.bindPopup(popupContent);
+            
+            marker.bindPopup(popupHTML);
             markersGroup.addLayer(marker);
             bounds.push([loc.lat, loc.lon]);
         });
 
         if (bounds.length > 0) map.fitBounds(bounds, { padding: [40, 40] });
     }
+
+    function locateUser() {
+        map.locate({setView: true, maxZoom: 16});
+    }
+
+    map.on('locationfound', function(e) {
+        if (userMarker) map.removeLayer(userMarker);
+        userMarker = L.circleMarker(e.latlng, { radius: 8, fillColor: "#3498db", color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.8 }).addTo(map);
+    });
 
     initMap();
     loadData();
