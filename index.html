@@ -13,15 +13,6 @@
         .filters { display: flex; gap: 5px; margin-bottom: 8px; }
         select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: white; }
         #map { flex-grow: 1; width: 100%; }
-        
-        /* עיצוב כפתור המיקום */
-        .locate-btn { 
-            position: absolute; bottom: 20px; right: 20px; z-index: 1000; 
-            background: white; border: none; width: 50px; height: 50px; 
-            border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.3); 
-            cursor: pointer; font-size: 24px; display: flex; align-items: center; justify-content: center;
-        }
-        
         .leaflet-popup-content { text-align: center; font-size: 16px; direction: rtl; }
         .waze-link { display: inline-block; background: #33ccff; color: white; text-decoration: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; margin-top: 8px; }
     </style>
@@ -41,43 +32,26 @@
 </div>
 
 <div id="map"></div>
-<button class="locate-btn" onclick="locateUser()">📍</button>
 
 <script>
     const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRQFmvRO2y4PoaVgEnhCOxf3G92L_0wO73LPbsCvn33n1zSvClsw0fjsVv090wBz0CKcho45E8HKPXX/pub?gid=1872889823&single=true&output=csv';
     let data = [];
-    let map, markersGroup, userMarker;
+    let map, markersGroup;
 
     function initMap() {
-        const satelliteMap = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: '© Google' });
-        const streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' });
+        // טעינת מפות (תצ"א ומפה רגילה)
+        var satelliteMap = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: 'Google' });
+        var streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
 
         map = L.map('map', {
             center: [32.11, 35.26],
             zoom: 11,
-            layers: [satelliteMap]
+            layers: [satelliteMap] // מתחיל ישר בתצ"א
         });
 
         L.control.layers({ "תצ\"א": satelliteMap, "מפה": streetMap }, null, { collapsed: false }).addTo(map);
         markersGroup = L.layerGroup().addTo(map);
     }
-
-    // פונקציית מירכוז על המשתמש
-    function locateUser() {
-        map.locate({setView: true, maxZoom: 16});
-    }
-
-    map.on('locationfound', (e) => {
-        if (userMarker) map.removeLayer(userMarker);
-        // יצירת עיגול כחול למיקום המשתמש
-        userMarker = L.circleMarker(e.latlng, {
-            radius: 8,
-            color: 'white',
-            fillColor: '#2196F3',
-            fillOpacity: 1,
-            weight: 2
-        }).addTo(map).bindPopup("אתה כאן");
-    });
 
     async function load() {
         try {
@@ -99,7 +73,9 @@
 
             fillFilters();
             filter();
-        } catch (e) { console.error("Load failed", e); }
+        } catch (e) {
+            console.error("שגיאה בטעינה");
+        }
     }
 
     function fillFilters() {
@@ -132,7 +108,7 @@
             m.bindPopup(`
                 <b>${i.name}</b><br>
                 <small>${i.type} | פלוגה ${i.pluga}</small><br>
-                <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">ניווט Waze</a>
+                <a href="https://waze.com/ul?ll=${i.lat},${i.lon}&navigate=yes" target="_blank" class="waze-link">Waze</a>
             `);
             markersGroup.addLayer(m);
             points.push([i.lat, i.lon]);
